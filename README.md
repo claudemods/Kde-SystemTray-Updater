@@ -5,7 +5,6 @@ C++ system tray application for system updates
   
   <a href="https://archlinux.org" target="_blank"><img src="https://img.shields.io/badge/DISTRO-Arch-56b6c2?style=for-the-badge&logo=arch-linux" /></a>
   <a href="https://ubuntu.com/" target="_blank"><img src="https://img.shields.io/badge/DISTRO-Ubuntu-E95420?style=for-the-badge&logo=Ubuntu" /></a>
-  <a href="https://www.debian.org" target="_blank"><img src="https://img.shields.io/badge/DISTRO-Debian-CE0058?style=for-the-badge&logo=Debian" /></a>
   
   <a href="https://chat.deepseek.com/" target="_blank">
     <img src="https://img.shields.io/badge/Built_Using-DeepSeek-4D6BFE?style=for-the-badge&logo=deepseek&logoColor=4D6BFE" alt="Built Using DeepSeek">
