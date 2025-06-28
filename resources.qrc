@@ -2,6 +2,6 @@
     <qresource prefix="/images">
         <file alias="no-updates.svg">images/no-updates.svg</file>
         <file alias="updates.svg">images/updates.svg</file>
-        <file alias="updates.svg">images/updated.svg</file>
+        <file alias="updated.svg">images/updated.svg</file>
     </qresource>
 </RCC>
