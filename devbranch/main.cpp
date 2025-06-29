@@ -18,9 +18,6 @@
 #include <QStyle>
 #include <QPainter>
 #include <QFontDatabase>
-#include <QDBusInterface>
-#include <QDBusConnection>
-#include <QDBusReply>
 
 class CountdownDialog : public QDialog {
     Q_OBJECT
@@ -136,9 +133,6 @@ public:
 
         // Initialize countdown dialog
         countdownDialog = new CountdownDialog();
-
-        // Connect to DBus for terminal monitoring
-        dbusConnection = QDBusConnection::sessionBus();
     }
 
 private slots:
@@ -437,7 +431,7 @@ private:
         "- Ubuntu (apt)\n"
         "- Debian (apt)\n"
         "- KDE Neon (pkcon)\n\n"
-        "claudemods Kde System Tray Updater v1.01");
+        "claudemods Kde System Tray Updater v1.01 devbranch");
         aboutBox.setStyleSheet("QLabel { color: #24ffff; }");
         aboutBox.exec();
     }
@@ -449,7 +443,6 @@ private:
     QTimer *autoCheckTimer = nullptr;
     CountdownDialog *countdownDialog = nullptr;
     QProcess *terminalProcess = nullptr;
-    QDBusConnection dbusConnection;
     QString currentDistro;
     bool updatesAvailable;
     int updateCount;
