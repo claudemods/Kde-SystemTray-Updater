@@ -18,6 +18,9 @@
 #include <QStyle>
 #include <QPainter>
 #include <QFontDatabase>
+#include <QDBusInterface>
+#include <QDBusConnection>
+#include <QDBusReply>
 
 class CountdownDialog : public QDialog {
     Q_OBJECT
@@ -133,6 +136,9 @@ public:
 
         // Initialize countdown dialog
         countdownDialog = new CountdownDialog();
+
+        // Connect to DBus for terminal monitoring
+        dbusConnection = QDBusConnection::sessionBus();
     }
 
 private slots:
@@ -249,31 +255,41 @@ private slots:
 
         if (currentDistro == "arch" || currentDistro == "cachyos") {
             command = "konsole";
-            args << "-e" << "sudo" << "pacman" << "-Syu";
+            args << "--hold" << "-e" << "sudo" << "pacman" << "-Syu";
         }
         else if (currentDistro == "ubuntu" || currentDistro == "debian") {
             command = "konsole";
-            args << "-e" << "bash" << "-c" << "sudo apt update && sudo apt upgrade -y";
+            args << "--hold" << "-e" << "bash" << "-c" << "sudo apt update && sudo apt upgrade -y";
         }
         else if (currentDistro == "neon") {
             command = "konsole";
-            args << "-e" << "sudo" << "pkcon" << "update" << "-y";
+            args << "--hold" << "-e" << "sudo" << "pkcon" << "update" << "-y";
         }
 
-        if (QProcess::startDetached(command, args)) {
-            // Show countdown dialog when updates start installing
-            countdownDialog->startCountdown();
+        // Start the process and monitor it
+        terminalProcess = new QProcess(this);
+        connect(terminalProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                this, &UpdateChecker::onTerminalClosed);
 
-            // Change icon to updated icon after installation starts
-            setIcon(updatedIcon);
-            
-            // Schedule an automatic update check after installation completes
-            QTimer::singleShot(10000, this, [this]() {
-                checkForUpdates();
-            });
-        } else {
-            showMessage("Error", "Failed to launch terminal", QSystemTrayIcon::Critical);
-        }
+        terminalProcess->start(command, args);
+
+        // Show countdown dialog when updates start installing
+        countdownDialog->startCountdown();
+
+        // Change icon to updated icon after installation starts
+        setIcon(updatedIcon);
+    }
+
+    void onTerminalClosed(int exitCode, QProcess::ExitStatus exitStatus) {
+        Q_UNUSED(exitCode);
+        Q_UNUSED(exitStatus);
+        
+        // Check for updates again after terminal closes
+        checkForUpdates();
+        
+        // Clean up the process
+        terminalProcess->deleteLater();
+        terminalProcess = nullptr;
     }
 
     void showConfig() {
@@ -421,7 +437,7 @@ private:
         "- Ubuntu (apt)\n"
         "- Debian (apt)\n"
         "- KDE Neon (pkcon)\n\n"
-        "claudemods Kde System Tray Updater v1.01 DevBranch");
+        "claudemods Kde System Tray Updater v1.01");
         aboutBox.setStyleSheet("QLabel { color: #24ffff; }");
         aboutBox.exec();
     }
@@ -432,6 +448,8 @@ private:
     QAction *updateAction;
     QTimer *autoCheckTimer = nullptr;
     CountdownDialog *countdownDialog = nullptr;
+    QProcess *terminalProcess = nullptr;
+    QDBusConnection dbusConnection;
     QString currentDistro;
     bool updatesAvailable;
     int updateCount;
