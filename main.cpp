@@ -74,6 +74,49 @@ private:
     int countdown;
 };
 
+class UpdateCompleteDialog : public QDialog {
+    Q_OBJECT
+public:
+    UpdateCompleteDialog(QWidget *parent = nullptr) : QDialog(parent) {
+        setWindowTitle("Update Complete");
+        setFixedSize(400, 200);
+
+        QVBoxLayout *layout = new QVBoxLayout(this);
+
+        QLabel *messageLabel = new QLabel("System updates were installed successfully!", this);
+        messageLabel->setAlignment(Qt::AlignCenter);
+        messageLabel->setStyleSheet("font-size: 16px; color: #24ffff;");
+        layout->addWidget(messageLabel);
+
+        QLabel *questionLabel = new QLabel("Would you like to reboot now?", this);
+        questionLabel->setAlignment(Qt::AlignCenter);
+        questionLabel->setStyleSheet("font-size: 14px;");
+        layout->addWidget(questionLabel);
+
+        QHBoxLayout *buttonLayout = new QHBoxLayout();
+
+        QPushButton *yesButton = new QPushButton("Yes", this);
+        yesButton->setStyleSheet("color: #24ffff;");
+        connect(yesButton, &QPushButton::clicked, [this]() {
+            rebootRequested = true;
+            accept();
+        });
+
+        QPushButton *noButton = new QPushButton("No", this);
+        noButton->setStyleSheet("color: #24ffff;");
+        connect(noButton, &QPushButton::clicked, this, &QDialog::reject);
+
+        buttonLayout->addWidget(yesButton);
+        buttonLayout->addWidget(noButton);
+        layout->addLayout(buttonLayout);
+    }
+
+    bool shouldReboot() const { return rebootRequested; }
+
+private:
+    bool rebootRequested = false;
+};
+
 class UpdateChecker : public QSystemTrayIcon {
     Q_OBJECT
 public:
@@ -131,8 +174,9 @@ public:
             autoCheckTimer->start(autoCheckInterval * 60 * 1000);
         }
 
-        // Initialize countdown dialog
+        // Initialize dialogs
         countdownDialog = new CountdownDialog();
+        updateCompleteDialog = new UpdateCompleteDialog();
     }
 
 private slots:
@@ -283,6 +327,13 @@ private slots:
         terminalProcess->deleteLater();
         terminalProcess = nullptr;
 
+        // Show update complete dialog
+        updateCompleteDialog->exec();
+
+        if (updateCompleteDialog->shouldReboot()) {
+            QProcess::startDetached("sudo", QStringList() << "reboot");
+        }
+
         // Check for updates again after terminal closes
         checkForUpdates();
     }
@@ -432,7 +483,7 @@ private:
         "- Ubuntu (apt)\n"
         "- Debian (apt)\n"
         "- KDE Neon (pkcon)\n\n"
-        "claudemods Kde System Tray Updater v1.01");
+        "claudemods Kde System Tray Updater v1.02");
         aboutBox.setStyleSheet("QLabel { color: #24ffff; }");
         aboutBox.exec();
     }
@@ -443,6 +494,7 @@ private:
     QAction *updateAction;
     QTimer *autoCheckTimer = nullptr;
     CountdownDialog *countdownDialog = nullptr;
+    UpdateCompleteDialog *updateCompleteDialog = nullptr;
     QProcess *terminalProcess = nullptr;
     QString currentDistro;
     bool updatesAvailable;
