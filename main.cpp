@@ -78,7 +78,7 @@ class UpdateChecker : public QSystemTrayIcon {
     Q_OBJECT
 public:
     UpdateChecker(QObject *parent = nullptr) : QSystemTrayIcon(parent), updatesAvailable(false) {
-        // Set SVG icons
+        // Set SVG icons (only using the original three)
         noUpdatesIcon = QIcon(":/images/no-updates.svg");
         updatesAvailableIcon = QIcon(":/images/updates.svg");
         updatedIcon = QIcon(":/images/updated.svg");
@@ -207,7 +207,7 @@ private slots:
 
     void listUpdates() {
         QDialog listDialog;
-        listDialog.setWindowTitle("Available Updates");
+        listDialog.setWindowTitle(QString("Available Updates (%1 packages)").arg(updateCount));
         listDialog.resize(600, 400);
 
         QVBoxLayout *layout = new QVBoxLayout(&listDialog);
@@ -260,21 +260,31 @@ private slots:
             args << "-e" << "sudo" << "pkcon" << "update" << "-y";
         }
 
-        if (QProcess::startDetached(command, args)) {
-            // Show countdown dialog when updates start installing
-            countdownDialog->startCountdown();
+        // Start the process and monitor it
+        terminalProcess = new QProcess(this);
+        connect(terminalProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                this, &UpdateChecker::onTerminalClosed);
 
-            // Change icon to updated icon after installation starts
-            setIcon(updatedIcon);
-            QTimer::singleShot(5000, this, [this]() {
-                // After 5 seconds, revert to no updates icon
-                if (!updatesAvailable) {
-                    setIcon(noUpdatesIcon);
-                }
-            });
-        } else {
-            showMessage("Error", "Failed to launch terminal", QSystemTrayIcon::Critical);
-        }
+        terminalProcess->start(command, args);
+
+        // Show countdown dialog when updates start installing
+        countdownDialog->startCountdown();
+
+        // Keep the updates available icon during installation
+        setIcon(updatesAvailableIcon);
+        setToolTip("Update Checker - Installing updates...");
+    }
+
+    void onTerminalClosed(int exitCode, QProcess::ExitStatus exitStatus) {
+        Q_UNUSED(exitCode);
+        Q_UNUSED(exitStatus);
+
+        // Clean up the process
+        terminalProcess->deleteLater();
+        terminalProcess = nullptr;
+
+        // Check for updates again after terminal closes
+        checkForUpdates();
     }
 
     void showConfig() {
@@ -333,17 +343,44 @@ private slots:
 
 private:
     void showUpdatePrompt() {
-        QMessageBox msgBox;
-        msgBox.setWindowTitle("Updates Available");
-        msgBox.setText(QString("%1 updates are available").arg(updateCount));
-        msgBox.setInformativeText("Would you like to install them now?");
-        msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
-        msgBox.setDefaultButton(QMessageBox::Yes);
-        msgBox.setStyleSheet("QLabel { color: #24ffff; }");
+        QDialog promptDialog;
+        promptDialog.setWindowTitle("Updates Available");
+        promptDialog.setFixedSize(400, 200);
 
-        if (msgBox.exec() == QMessageBox::Yes) {
+        QVBoxLayout *layout = new QVBoxLayout(&promptDialog);
+
+        QLabel *messageLabel = new QLabel(QString("%1 updates are available").arg(updateCount), &promptDialog);
+        messageLabel->setAlignment(Qt::AlignCenter);
+        messageLabel->setStyleSheet("font-size: 16px; color: #24ffff;");
+        layout->addWidget(messageLabel);
+
+        QHBoxLayout *buttonLayout = new QHBoxLayout();
+
+        QPushButton *installButton = new QPushButton("Install Now", &promptDialog);
+        installButton->setStyleSheet("color: #24ffff;");
+        connect(installButton, &QPushButton::clicked, [&]() {
+            promptDialog.accept();
             installUpdates();
-        }
+        });
+
+        QPushButton *listButton = new QPushButton("View List", &promptDialog);
+        listButton->setStyleSheet("color: #24ffff;");
+        connect(listButton, &QPushButton::clicked, [&]() {
+            promptDialog.accept();
+            listUpdates();
+        });
+
+        QPushButton *laterButton = new QPushButton("Later", &promptDialog);
+        laterButton->setStyleSheet("color: #24ffff;");
+        connect(laterButton, &QPushButton::clicked, &promptDialog, &QDialog::reject);
+
+        buttonLayout->addWidget(installButton);
+        buttonLayout->addWidget(listButton);
+        buttonLayout->addWidget(laterButton);
+
+        layout->addLayout(buttonLayout);
+
+        promptDialog.exec();
     }
 
     QString detectDistribution() {
@@ -395,7 +432,7 @@ private:
         "- Ubuntu (apt)\n"
         "- Debian (apt)\n"
         "- KDE Neon (pkcon)\n\n"
-        "claudemods Kde System Tray Updater Version 1.0");
+        "claudemods Kde System Tray Updater v1.01");
         aboutBox.setStyleSheet("QLabel { color: #24ffff; }");
         aboutBox.exec();
     }
@@ -406,6 +443,7 @@ private:
     QAction *updateAction;
     QTimer *autoCheckTimer = nullptr;
     CountdownDialog *countdownDialog = nullptr;
+    QProcess *terminalProcess = nullptr;
     QString currentDistro;
     bool updatesAvailable;
     int updateCount;
@@ -422,7 +460,7 @@ private:
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
     app.setApplicationName("Update Checker");
-    app.setOrganizationName("System Tools");
+    app.setOrganizationName("claudemods");
 
     if (!QSystemTrayIcon::isSystemTrayAvailable()) {
         QMessageBox::critical(nullptr, "Error", "System tray not available");
