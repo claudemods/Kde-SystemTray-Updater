@@ -331,7 +331,7 @@ private slots:
         updateCompleteDialog->exec();
 
         if (updateCompleteDialog->shouldReboot()) {
-            QProcess::startDetached("sudo", QStringList() << "reboot");
+            QProcess::startDetached("konsole -e sudo", QStringList() << "reboot");
         }
 
         // Check for updates again after terminal closes
