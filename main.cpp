@@ -331,7 +331,7 @@ private slots:
         updateCompleteDialog->exec();
 
         if (updateCompleteDialog->shouldReboot()) {
-            QProcess::startDetached("konsole -e sudo", QStringList() << "reboot");
+            QProcess::startDetached("konsole", QStringList() << "-e" << "sudo" << "reboot");
         }
 
         // Check for updates again after terminal closes
@@ -394,36 +394,41 @@ private slots:
 
 private:
     void showUpdatePrompt() {
-        QDialog promptDialog;
-        promptDialog.setWindowTitle("Updates Available");
-        promptDialog.setFixedSize(400, 200);
+        QDialog *promptDialog = new QDialog();  // Changed to pointer to keep it alive
+        promptDialog->setWindowTitle("Updates Available");
+        promptDialog->setFixedSize(400, 200);
 
-        QVBoxLayout *layout = new QVBoxLayout(&promptDialog);
+        QVBoxLayout *layout = new QVBoxLayout(promptDialog);
 
-        QLabel *messageLabel = new QLabel(QString("%1 updates are available").arg(updateCount), &promptDialog);
+        QLabel *messageLabel = new QLabel(QString("%1 updates are available").arg(updateCount), promptDialog);
         messageLabel->setAlignment(Qt::AlignCenter);
         messageLabel->setStyleSheet("font-size: 16px; color: #24ffff;");
         layout->addWidget(messageLabel);
 
         QHBoxLayout *buttonLayout = new QHBoxLayout();
 
-        QPushButton *installButton = new QPushButton("Install Now", &promptDialog);
+        QPushButton *installButton = new QPushButton("Install Now", promptDialog);
         installButton->setStyleSheet("color: #24ffff;");
-        connect(installButton, &QPushButton::clicked, [&]() {
-            promptDialog.accept();
+        connect(installButton, &QPushButton::clicked, [this, promptDialog]() {
+            promptDialog->accept();
             installUpdates();
+            promptDialog->deleteLater();  // Clean up when done
         });
 
-        QPushButton *listButton = new QPushButton("View List", &promptDialog);
+        QPushButton *listButton = new QPushButton("View List", promptDialog);
         listButton->setStyleSheet("color: #24ffff;");
-        connect(listButton, &QPushButton::clicked, [&]() {
-            promptDialog.accept();
+        connect(listButton, &QPushButton::clicked, [this, promptDialog]() {
+            promptDialog->accept();
             listUpdates();
+            promptDialog->deleteLater();  // Clean up when done
         });
 
-        QPushButton *laterButton = new QPushButton("Later", &promptDialog);
+        QPushButton *laterButton = new QPushButton("Later", promptDialog);
         laterButton->setStyleSheet("color: #24ffff;");
-        connect(laterButton, &QPushButton::clicked, &promptDialog, &QDialog::reject);
+        connect(laterButton, &QPushButton::clicked, [promptDialog]() {
+            // Just hide the dialog instead of closing it
+            promptDialog->hide();
+        });
 
         buttonLayout->addWidget(installButton);
         buttonLayout->addWidget(listButton);
@@ -431,7 +436,10 @@ private:
 
         layout->addLayout(buttonLayout);
 
-        promptDialog.exec();
+        // Delete dialog when closed
+        connect(promptDialog, &QDialog::finished, promptDialog, &QDialog::deleteLater);
+
+        promptDialog->show();
     }
 
     QString detectDistribution() {
@@ -483,7 +491,7 @@ private:
         "- Ubuntu (apt)\n"
         "- Debian (apt)\n"
         "- KDE Neon (pkcon)\n\n"
-        "claudemods Kde System Tray Updater v1.02");
+        "claudemods Kde System Tray Updater v1.03");
         aboutBox.setStyleSheet("QLabel { color: #24ffff; }");
         aboutBox.exec();
     }
