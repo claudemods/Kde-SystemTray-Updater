@@ -74,11 +74,54 @@ private:
     int countdown;
 };
 
+class UpdateCompleteDialog : public QDialog {
+    Q_OBJECT
+public:
+    UpdateCompleteDialog(QWidget *parent = nullptr) : QDialog(parent) {
+        setWindowTitle("Update Complete");
+        setFixedSize(400, 200);
+
+        QVBoxLayout *layout = new QVBoxLayout(this);
+
+        QLabel *messageLabel = new QLabel("System updates were installed successfully!", this);
+        messageLabel->setAlignment(Qt::AlignCenter);
+        messageLabel->setStyleSheet("font-size: 16px; color: #24ffff;");
+        layout->addWidget(messageLabel);
+
+        QLabel *questionLabel = new QLabel("Would you like to reboot now?", this);
+        questionLabel->setAlignment(Qt::AlignCenter);
+        questionLabel->setStyleSheet("font-size: 14px;");
+        layout->addWidget(questionLabel);
+
+        QHBoxLayout *buttonLayout = new QHBoxLayout();
+
+        QPushButton *yesButton = new QPushButton("Yes", this);
+        yesButton->setStyleSheet("color: #24ffff;");
+        connect(yesButton, &QPushButton::clicked, [this]() {
+            rebootRequested = true;
+            accept();
+        });
+
+        QPushButton *noButton = new QPushButton("No", this);
+        noButton->setStyleSheet("color: #24ffff;");
+        connect(noButton, &QPushButton::clicked, this, &QDialog::reject);
+
+        buttonLayout->addWidget(yesButton);
+        buttonLayout->addWidget(noButton);
+        layout->addLayout(buttonLayout);
+    }
+
+    bool shouldReboot() const { return rebootRequested; }
+
+private:
+    bool rebootRequested = false;
+};
+
 class UpdateChecker : public QSystemTrayIcon {
     Q_OBJECT
 public:
-    UpdateChecker(QObject *parent = nullptr) : QSystemTrayIcon(parent), updatesAvailable(false) {
-        // Set SVG icons
+    UpdateChecker(QObject *parent = nullptr) : QSystemTrayIcon(parent), updatesAvailable(false), updatePromptDialog(nullptr) {
+        // Set SVG icons (only using the original three)
         noUpdatesIcon = QIcon(":/images/no-updates.svg");
         updatesAvailableIcon = QIcon(":/images/updates.svg");
         updatedIcon = QIcon(":/images/updated.svg");
@@ -131,12 +174,27 @@ public:
             autoCheckTimer->start(autoCheckInterval * 60 * 1000);
         }
 
-        // Initialize countdown dialog
+        // Initialize dialogs
         countdownDialog = new CountdownDialog();
+        updateCompleteDialog = new UpdateCompleteDialog();
+    }
+
+    ~UpdateChecker() {
+        // Clean up update prompt dialog if it exists
+        if (updatePromptDialog) {
+            updatePromptDialog->deleteLater();
+        }
     }
 
 private slots:
     void checkForUpdates() {
+        // Close existing update prompt dialog before checking for new updates
+        if (updatePromptDialog && updatePromptDialog->isVisible()) {
+            updatePromptDialog->close();
+            updatePromptDialog->deleteLater();
+            updatePromptDialog = nullptr;
+        }
+
         currentDistro = detectDistribution();
         QString command;
         QStringList args;
@@ -167,17 +225,17 @@ private slots:
         if ((currentDistro == "ubuntu" || currentDistro == "debian") &&
             error.contains("WARNING: apt does not have a stable CLI interface")) {
             error.clear();
-        }
+            }
 
-        if (!error.isEmpty()) {
-            showMessage("Error", "Update check failed: " + error, QSystemTrayIcon::Critical, 5000);
-            return;
-        }
+            if (!error.isEmpty()) {
+                showMessage("Error", "Update check failed: " + error, QSystemTrayIcon::Critical, 5000);
+                return;
+            }
 
-        if (output.trimmed().isEmpty() ||
-            ((currentDistro == "ubuntu" || currentDistro == "debian") && output.startsWith("Listing..."))) {
-            // No updates available
-            updatesAvailable = false;
+            if (output.trimmed().isEmpty() ||
+                ((currentDistro == "ubuntu" || currentDistro == "debian") && output.startsWith("Listing..."))) {
+                // No updates available
+                updatesAvailable = false;
             availableUpdates.clear();
             setIcon(noUpdatesIcon);
             setToolTip("Update Checker - System up to date");
@@ -187,22 +245,22 @@ private slots:
             if (showNoUpdatesNotification) {
                 showMessage("Update Checker", "System is up to date", QSystemTrayIcon::Information, 3000);
             }
-        } else {
-            // Updates available
-            updatesAvailable = true;
-            availableUpdates = output;
-            updateCount = output.count('\n');
-            if (currentDistro == "ubuntu" || currentDistro == "debian") updateCount--;
+                } else {
+                    // Updates available
+                    updatesAvailable = true;
+                    availableUpdates = output;
+                    updateCount = output.count('\n');
+                    if (currentDistro == "ubuntu" || currentDistro == "debian") updateCount--;
 
-            setIcon(updatesAvailableIcon);
-            setToolTip(QString("Update Checker - %1 updates available").arg(updateCount));
-            listAction->setEnabled(true);
-            updateAction->setEnabled(true);
+                    setIcon(updatesAvailableIcon);
+                    setToolTip(QString("Update Checker - %1 updates available").arg(updateCount));
+                    listAction->setEnabled(true);
+                    updateAction->setEnabled(true);
 
-            if (showUpdatesNotification) {
-                showUpdatePrompt();
-            }
-        }
+                    if (showUpdatesNotification) {
+                        showUpdatePrompt();
+                    }
+                }
     }
 
     void listUpdates() {
@@ -249,15 +307,15 @@ private slots:
 
         if (currentDistro == "arch" || currentDistro == "cachyos") {
             command = "konsole";
-            args << "--hold" << "-e" << "sudo" << "pacman" << "-Syu";
+            args << "-e" << "sudo" << "pacman" << "-Syu";
         }
         else if (currentDistro == "ubuntu" || currentDistro == "debian") {
             command = "konsole";
-            args << "--hold" << "-e" << "bash" << "-c" << "sudo apt update && sudo apt upgrade -y";
+            args << "-e" << "bash" << "-c" << "sudo apt update && sudo apt upgrade -y";
         }
         else if (currentDistro == "neon") {
             command = "konsole";
-            args << "--hold" << "-e" << "sudo" << "pkcon" << "update" << "-y";
+            args << "-e" << "sudo" << "pkcon" << "update" << "-y";
         }
 
         // Start the process and monitor it
@@ -270,20 +328,28 @@ private slots:
         // Show countdown dialog when updates start installing
         countdownDialog->startCountdown();
 
-        // Change icon to updated icon after installation starts
-        setIcon(updatedIcon);
+        // Keep the updates available icon during installation
+        setIcon(updatesAvailableIcon);
+        setToolTip("Update Checker - Installing updates...");
     }
 
     void onTerminalClosed(int exitCode, QProcess::ExitStatus exitStatus) {
         Q_UNUSED(exitCode);
         Q_UNUSED(exitStatus);
-        
-        // Check for updates again after terminal closes
-        checkForUpdates();
-        
+
         // Clean up the process
         terminalProcess->deleteLater();
         terminalProcess = nullptr;
+
+        // Show update complete dialog
+        updateCompleteDialog->exec();
+
+        if (updateCompleteDialog->shouldReboot()) {
+            QProcess::startDetached("konsole", QStringList() << "-e" << "sudo" << "reboot");
+        }
+
+        // Check for updates again after terminal closes
+        checkForUpdates();
     }
 
     void showConfig() {
@@ -342,36 +408,48 @@ private slots:
 
 private:
     void showUpdatePrompt() {
-        QDialog promptDialog;
-        promptDialog.setWindowTitle("Updates Available");
-        promptDialog.setFixedSize(400, 200);
+        // Close existing dialog if it's open
+        if (updatePromptDialog && updatePromptDialog->isVisible()) {
+            updatePromptDialog->close();
+            updatePromptDialog->deleteLater();
+        }
 
-        QVBoxLayout *layout = new QVBoxLayout(&promptDialog);
+        updatePromptDialog = new QDialog();
+        updatePromptDialog->setWindowTitle("Updates Available");
+        updatePromptDialog->setFixedSize(400, 200);
 
-        QLabel *messageLabel = new QLabel(QString("%1 updates are available").arg(updateCount), &promptDialog);
+        QVBoxLayout *layout = new QVBoxLayout(updatePromptDialog);
+
+        QLabel *messageLabel = new QLabel(QString("%1 updates are available").arg(updateCount), updatePromptDialog);
         messageLabel->setAlignment(Qt::AlignCenter);
         messageLabel->setStyleSheet("font-size: 16px; color: #24ffff;");
         layout->addWidget(messageLabel);
 
         QHBoxLayout *buttonLayout = new QHBoxLayout();
 
-        QPushButton *installButton = new QPushButton("Install Now", &promptDialog);
+        QPushButton *installButton = new QPushButton("Install Now", updatePromptDialog);
         installButton->setStyleSheet("color: #24ffff;");
-        connect(installButton, &QPushButton::clicked, [&]() {
-            promptDialog.accept();
+        connect(installButton, &QPushButton::clicked, [this]() {
+            updatePromptDialog->accept();
             installUpdates();
+            updatePromptDialog->deleteLater();
+            updatePromptDialog = nullptr;
         });
 
-        QPushButton *listButton = new QPushButton("View List", &promptDialog);
+        QPushButton *listButton = new QPushButton("View List", updatePromptDialog);
         listButton->setStyleSheet("color: #24ffff;");
-        connect(listButton, &QPushButton::clicked, [&]() {
-            promptDialog.accept();
+        connect(listButton, &QPushButton::clicked, [this]() {
+            updatePromptDialog->accept();
             listUpdates();
+            updatePromptDialog->deleteLater();
+            updatePromptDialog = nullptr;
         });
 
-        QPushButton *laterButton = new QPushButton("Later", &promptDialog);
+        QPushButton *laterButton = new QPushButton("Later", updatePromptDialog);
         laterButton->setStyleSheet("color: #24ffff;");
-        connect(laterButton, &QPushButton::clicked, &promptDialog, &QDialog::reject);
+        connect(laterButton, &QPushButton::clicked, [this]() {
+            updatePromptDialog->hide();
+        });
 
         buttonLayout->addWidget(installButton);
         buttonLayout->addWidget(listButton);
@@ -379,7 +457,15 @@ private:
 
         layout->addLayout(buttonLayout);
 
-        promptDialog.exec();
+        // Delete dialog when closed
+        connect(updatePromptDialog, &QDialog::finished, [this]() {
+            if (updatePromptDialog) {
+                updatePromptDialog->deleteLater();
+                updatePromptDialog = nullptr;
+            }
+        });
+
+        updatePromptDialog->show();
     }
 
     QString detectDistribution() {
@@ -431,7 +517,7 @@ private:
         "- Ubuntu (apt)\n"
         "- Debian (apt)\n"
         "- KDE Neon (pkcon)\n\n"
-        "claudemods Kde System Tray Updater v1.01 devbranch");
+        "claudemods Kde System Tray Updater v1.03.1");
         aboutBox.setStyleSheet("QLabel { color: #24ffff; }");
         aboutBox.exec();
     }
@@ -442,7 +528,9 @@ private:
     QAction *updateAction;
     QTimer *autoCheckTimer = nullptr;
     CountdownDialog *countdownDialog = nullptr;
+    UpdateCompleteDialog *updateCompleteDialog = nullptr;
     QProcess *terminalProcess = nullptr;
+    QDialog *updatePromptDialog = nullptr;  // Store reference to the update prompt dialog
     QString currentDistro;
     bool updatesAvailable;
     int updateCount;
