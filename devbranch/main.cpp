@@ -188,13 +188,6 @@ public:
 
 private slots:
     void checkForUpdates() {
-        // Close existing update prompt dialog before checking for new updates
-        if (updatePromptDialog && updatePromptDialog->isVisible()) {
-            updatePromptDialog->close();
-            updatePromptDialog->deleteLater();
-            updatePromptDialog = nullptr;
-        }
-
         currentDistro = detectDistribution();
         QString command;
         QStringList args;
@@ -410,8 +403,9 @@ private:
     void showUpdatePrompt() {
         // Close existing dialog if it's open
         if (updatePromptDialog && updatePromptDialog->isVisible()) {
-            updatePromptDialog->close();
+            updatePromptDialog->hide();
             updatePromptDialog->deleteLater();
+            updatePromptDialog = nullptr;
         }
 
         updatePromptDialog = new QDialog();
@@ -430,25 +424,31 @@ private:
         QPushButton *installButton = new QPushButton("Install Now", updatePromptDialog);
         installButton->setStyleSheet("color: #24ffff;");
         connect(installButton, &QPushButton::clicked, [this]() {
-            updatePromptDialog->accept();
+            if (updatePromptDialog) {
+                updatePromptDialog->accept();
+                updatePromptDialog->deleteLater();
+                updatePromptDialog = nullptr;
+            }
             installUpdates();
-            updatePromptDialog->deleteLater();
-            updatePromptDialog = nullptr;
         });
 
         QPushButton *listButton = new QPushButton("View List", updatePromptDialog);
         listButton->setStyleSheet("color: #24ffff;");
         connect(listButton, &QPushButton::clicked, [this]() {
-            updatePromptDialog->accept();
+            if (updatePromptDialog) {
+                updatePromptDialog->accept();
+                updatePromptDialog->deleteLater();
+                updatePromptDialog = nullptr;
+            }
             listUpdates();
-            updatePromptDialog->deleteLater();
-            updatePromptDialog = nullptr;
         });
 
         QPushButton *laterButton = new QPushButton("Later", updatePromptDialog);
         laterButton->setStyleSheet("color: #24ffff;");
         connect(laterButton, &QPushButton::clicked, [this]() {
-            updatePromptDialog->hide();
+            if (updatePromptDialog) {
+                updatePromptDialog->hide();
+            }
         });
 
         buttonLayout->addWidget(installButton);
