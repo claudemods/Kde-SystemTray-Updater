@@ -120,7 +120,7 @@ private:
 class UpdateChecker : public QSystemTrayIcon {
     Q_OBJECT
 public:
-    UpdateChecker(QObject *parent = nullptr) : QSystemTrayIcon(parent), updatesAvailable(false) {
+    UpdateChecker(QObject *parent = nullptr) : QSystemTrayIcon(parent), updatesAvailable(false), updatePromptDialog(nullptr) {
         // Set SVG icons (only using the original three)
         noUpdatesIcon = QIcon(":/images/no-updates.svg");
         updatesAvailableIcon = QIcon(":/images/updates.svg");
@@ -177,6 +177,13 @@ public:
         // Initialize dialogs
         countdownDialog = new CountdownDialog();
         updateCompleteDialog = new UpdateCompleteDialog();
+    }
+
+    ~UpdateChecker() {
+        // Clean up update prompt dialog if it exists
+        if (updatePromptDialog) {
+            updatePromptDialog->deleteLater();
+        }
     }
 
 private slots:
@@ -394,40 +401,54 @@ private slots:
 
 private:
     void showUpdatePrompt() {
-        QDialog *promptDialog = new QDialog();  // Changed to pointer to keep it alive
-        promptDialog->setWindowTitle("Updates Available");
-        promptDialog->setFixedSize(400, 200);
+        // Close existing dialog if it's open
+        if (updatePromptDialog && updatePromptDialog->isVisible()) {
+            updatePromptDialog->hide();
+            updatePromptDialog->deleteLater();
+            updatePromptDialog = nullptr;
+        }
 
-        QVBoxLayout *layout = new QVBoxLayout(promptDialog);
+        updatePromptDialog = new QDialog();
+        updatePromptDialog->setWindowTitle("Updates Available");
+        updatePromptDialog->setFixedSize(400, 200);
 
-        QLabel *messageLabel = new QLabel(QString("%1 updates are available").arg(updateCount), promptDialog);
+        QVBoxLayout *layout = new QVBoxLayout(updatePromptDialog);
+
+        QLabel *messageLabel = new QLabel(QString("%1 updates are available").arg(updateCount), updatePromptDialog);
         messageLabel->setAlignment(Qt::AlignCenter);
         messageLabel->setStyleSheet("font-size: 16px; color: #24ffff;");
         layout->addWidget(messageLabel);
 
         QHBoxLayout *buttonLayout = new QHBoxLayout();
 
-        QPushButton *installButton = new QPushButton("Install Now", promptDialog);
+        QPushButton *installButton = new QPushButton("Install Now", updatePromptDialog);
         installButton->setStyleSheet("color: #24ffff;");
-        connect(installButton, &QPushButton::clicked, [this, promptDialog]() {
-            promptDialog->accept();
+        connect(installButton, &QPushButton::clicked, [this]() {
+            if (updatePromptDialog) {
+                updatePromptDialog->accept();
+                updatePromptDialog->deleteLater();
+                updatePromptDialog = nullptr;
+            }
             installUpdates();
-            promptDialog->deleteLater();  // Clean up when done
         });
 
-        QPushButton *listButton = new QPushButton("View List", promptDialog);
+        QPushButton *listButton = new QPushButton("View List", updatePromptDialog);
         listButton->setStyleSheet("color: #24ffff;");
-        connect(listButton, &QPushButton::clicked, [this, promptDialog]() {
-            promptDialog->accept();
+        connect(listButton, &QPushButton::clicked, [this]() {
+            if (updatePromptDialog) {
+                updatePromptDialog->accept();
+                updatePromptDialog->deleteLater();
+                updatePromptDialog = nullptr;
+            }
             listUpdates();
-            promptDialog->deleteLater();  // Clean up when done
         });
 
-        QPushButton *laterButton = new QPushButton("Later", promptDialog);
+        QPushButton *laterButton = new QPushButton("Later", updatePromptDialog);
         laterButton->setStyleSheet("color: #24ffff;");
-        connect(laterButton, &QPushButton::clicked, [promptDialog]() {
-            // Just hide the dialog instead of closing it
-            promptDialog->hide();
+        connect(laterButton, &QPushButton::clicked, [this]() {
+            if (updatePromptDialog) {
+                updatePromptDialog->hide();
+            }
         });
 
         buttonLayout->addWidget(installButton);
@@ -437,9 +458,14 @@ private:
         layout->addLayout(buttonLayout);
 
         // Delete dialog when closed
-        connect(promptDialog, &QDialog::finished, promptDialog, &QDialog::deleteLater);
+        connect(updatePromptDialog, &QDialog::finished, [this]() {
+            if (updatePromptDialog) {
+                updatePromptDialog->deleteLater();
+                updatePromptDialog = nullptr;
+            }
+        });
 
-        promptDialog->show();
+        updatePromptDialog->show();
     }
 
     QString detectDistribution() {
@@ -491,7 +517,7 @@ private:
         "- Ubuntu (apt)\n"
         "- Debian (apt)\n"
         "- KDE Neon (pkcon)\n\n"
-        "claudemods Kde System Tray Updater v1.03");
+        "claudemods Kde System Tray Updater v1.03.1");
         aboutBox.setStyleSheet("QLabel { color: #24ffff; }");
         aboutBox.exec();
     }
@@ -504,6 +530,7 @@ private:
     CountdownDialog *countdownDialog = nullptr;
     UpdateCompleteDialog *updateCompleteDialog = nullptr;
     QProcess *terminalProcess = nullptr;
+    QDialog *updatePromptDialog = nullptr;  // Store reference to the update prompt dialog
     QString currentDistro;
     bool updatesAvailable;
     int updateCount;
