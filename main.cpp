@@ -295,6 +295,11 @@ private slots:
     }
 
     void installUpdates() {
+        // Close any existing update prompt dialog
+        if (updatePromptDialog && updatePromptDialog->isVisible()) {
+            updatePromptDialog->close();
+        }
+
         QString command;
         QStringList args;
 
@@ -403,7 +408,7 @@ private:
     void showUpdatePrompt() {
         // Close existing dialog if it's open
         if (updatePromptDialog && updatePromptDialog->isVisible()) {
-            updatePromptDialog->hide();
+            updatePromptDialog->close();
             updatePromptDialog->deleteLater();
             updatePromptDialog = nullptr;
         }
@@ -423,31 +428,27 @@ private:
 
         QPushButton *installButton = new QPushButton("Install Now", updatePromptDialog);
         installButton->setStyleSheet("color: #24ffff;");
-        connect(installButton, &QPushButton::clicked, [this]() {
+        connect(installButton, &QPushButton::clicked, this, [this]() {
             if (updatePromptDialog) {
-                updatePromptDialog->accept();
-                updatePromptDialog->deleteLater();
-                updatePromptDialog = nullptr;
+                updatePromptDialog->close();
             }
             installUpdates();
         });
 
         QPushButton *listButton = new QPushButton("View List", updatePromptDialog);
         listButton->setStyleSheet("color: #24ffff;");
-        connect(listButton, &QPushButton::clicked, [this]() {
+        connect(listButton, &QPushButton::clicked, this, [this]() {
             if (updatePromptDialog) {
-                updatePromptDialog->accept();
-                updatePromptDialog->deleteLater();
-                updatePromptDialog = nullptr;
+                updatePromptDialog->close();
             }
             listUpdates();
         });
 
         QPushButton *laterButton = new QPushButton("Later", updatePromptDialog);
         laterButton->setStyleSheet("color: #24ffff;");
-        connect(laterButton, &QPushButton::clicked, [this]() {
+        connect(laterButton, &QPushButton::clicked, this, [this]() {
             if (updatePromptDialog) {
-                updatePromptDialog->hide();
+                updatePromptDialog->close();
             }
         });
 
@@ -458,7 +459,7 @@ private:
         layout->addLayout(buttonLayout);
 
         // Delete dialog when closed
-        connect(updatePromptDialog, &QDialog::finished, [this]() {
+        connect(updatePromptDialog, &QDialog::finished, this, [this]() {
             if (updatePromptDialog) {
                 updatePromptDialog->deleteLater();
                 updatePromptDialog = nullptr;
@@ -517,7 +518,7 @@ private:
         "- Ubuntu (apt)\n"
         "- Debian (apt)\n"
         "- KDE Neon (pkcon)\n\n"
-        "claudemods Kde System Tray Updater v1.03.1");
+        "claudemods Kde System Tray Updater v1.03.2");
         aboutBox.setStyleSheet("QLabel { color: #24ffff; }");
         aboutBox.exec();
     }
